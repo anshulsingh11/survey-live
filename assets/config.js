@@ -12,7 +12,7 @@
     backend: 'http://localhost:8001',
 
     // The agency's public id (agy_…): Settings in the dashboard.
-    agency: 'agy_01a13d42a5657a6699b640c92d101e7b',
+    agency: 'agy_01a1405556ca748496b8e951e3acc44f',
 
     // The project the survey page's own scans belong to (prj_…). Not the lobby link's project: see README.md.
     project: 'prj_01a13fa11b3c7fea8b80c2ca1513327d',

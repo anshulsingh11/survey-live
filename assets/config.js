@@ -9,7 +9,7 @@
 
   var config = {
     // The SurveyGuard API, as the respondent's browser reaches it. The SDK is loaded from here, and talks to it.
-    backend: 'http://localhost:8001',
+    backend: 'https://sg.surveyguardplus.com',
 
     // The agency's public id (agy_…): Settings in the dashboard.
     agency: 'agy_01a1405556ca748496b8e951e3acc44f',

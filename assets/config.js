@@ -15,7 +15,7 @@
     agency: 'agy_01a1405556ca748496b8e951e3acc44f',
 
     // The project the survey page's own scans belong to (prj_…). Not the lobby link's project: see README.md.
-    project: 'prj_01a13fa11b3c7fea8b80c2ca1513327d',
+    project: 'prj_01a1408d474673a9bd3a9a032cab95ad',
 
     // What the SDK does when it cannot get an answer: BLOCK, REVIEW or ALLOW. There is no default.
     failStrategy: 'REVIEW',

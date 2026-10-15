@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Test Survey Console</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="wrap wide">
+    <div class="brandbar"><span class="dot"></span> SurveyGuard: test survey console</div>
+    <div class="verdict error" id="setup" style="display:none"></div>
+
+    <div class="card">
+      <h1>1. Suppliers</h1>
+      <p class="lede">Who sends respondents, how each one names its respondent id, and where each ending goes.
+        <code>[RID]</code> in a URL is replaced with the respondent id. A relative URL is read against the survey. An
+        ending left empty stays on the survey's own end page (security falls back to terminate).</p>
+      <p class="cfg" id="source-of-list"></p>
+      <div id="editor"></div>
+      <div class="err" id="editor-err"></div>
+      <div class="nav" style="margin-top:8px;flex-wrap:wrap">
+        <button class="btn-ghost" id="add">+ Add supplier</button>
+        <button class="btn-ghost" id="discard">Discard changes</button>
+        <button class="btn-ghost" id="reset">Reset to config.js</button>
+        <button class="btn-ghost" id="export">Export for config.js</button>
+        <button class="btn-primary" id="save">Save</button>
+      </div>
+      <div class="note">Saved in <b>this browser only</b>: the survey uses this list for respondents who open it here.
+        Respondents on other devices (a deployed survey) get <code>assets/config.js</code>'s list: export this one and
+        paste it over <code>suppliers</code> there. Register the same codes and URLs in the dashboard
+        (<b>Suppliers</b>) too: after the decoy, the server sends a respondent to its record's security URL.</div>
+      <div class="field" id="export-box" style="display:none;margin-top:14px">
+        <label for="export-text">Paste over <code>suppliers: { … },</code> in assets/config.js</label>
+        <textarea id="export-text" readonly style="min-height:220px"></textarea>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h1>2. Go straight to the survey (SDK only)</h1>
+      <p class="lede">One entry link per supplier, as the supplier would send a respondent: its code in
+        <code>src</code>, its respondent id in its own parameter. Each click is a new respondent. On the survey,
+        <b>Under 18</b> or <b>Never</b> shop online terminates, a full quota cell (<b id="full"></b>) is over quota,
+        and finishing is a complete unless SurveyGuard screens the respondent out (security).</p>
+      <table class="matrix" id="suppliers"><thead><tr><th>Supplier</th><th>Entry link</th><th>Endings</th><th></th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h1>3. Through the lobby</h1>
+      <p class="lede">Lobby links are signed by the server, so this page cannot make one. Generate one per supplier in
+        the dashboard (<b>Projects → the lobby project → Links</b>), choosing the supplier, with that supplier's
+        target URL below, and paste it here. A respondent the lobby blocks goes to the link's terminate URL: the
+        supplier's security URL in the dashboard, unless you give one.</p>
+      <table class="matrix" id="targets"><thead><tr><th>Supplier</th><th>Target URL to give the dashboard</th></tr>
+      </thead><tbody></tbody></table>
+      <div class="field" style="margin-top:14px">
+        <label for="link">Signed lobby link</label>
+        <textarea id="link" placeholder="http://localhost:8001/lobby?t=…&x=…&a=…&p=…&k=…&sig=…&src=…&rid=[RID]"></textarea>
+      </div>
+      <p class="cfg">The respondent id below replaces the link's <code>rid</code> (it is not signed: a panel fills it
+        in). The lane buttons add <code>_test_lane</code>, which the server honours only with
+        <code>SG_LOBBY_TEST_OVERRIDES=true</code>.</p>
+      <div class="urlbox" id="lobby-url">paste a link above</div>
+      <div class="nav" style="margin-top:0">
+        <button class="btn-ghost" id="lobby-new">New respondent id</button>
+        <a class="btn-primary" id="lobby-open" target="_blank" rel="noopener"
+           style="text-decoration:none;text-align:center">Natural routing ↗</a>
+      </div>
+      <div class="lanes" style="margin-top:14px">
+        <button class="lane green" data-lane="green">Green</button>
+        <button class="lane yellow" data-lane="yellow">Yellow</button>
+        <button class="lane red" data-lane="red">Red</button>
+        <button class="lane" style="background:#1f2937" data-lane="block">Block</button>
+      </div>
+      <div class="note">The lobby knows a respondent by address and browser: from one browser, the second entry is
+        yellow and the seventh is blocked. Use the lane buttons, or another browser, to test a lane again.</div>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+      <h1>4. See what happened</h1>
+      <p class="lede">The agency dashboard has every scan, its verdict and why: <b>Scans</b> for the survey page,
+        <b>Lobby feed</b> for the lobby.</p>
+      <div class="nav" style="margin-top:0">
+        <a class="btn-primary" id="dashboard" target="_blank" rel="noopener"
+           style="text-decoration:none;text-align:center">Open the dashboard ↗</a>
+      </div>
+    </div>
+
+    <p class="foot cfg" id="cfgline"></p>
+  </div>
+
+  <script src="assets/config.js"></script>
+  <script>
+    (function () {
+      var cfg = window.SG_CONFIG || {};
+      var here = location.origin + location.pathname.replace(/[^/]+$/, '');
+      var ENDINGS = ['complete', 'terminate', 'overquota', 'security'];
+      var CODE = /^[A-Za-z0-9._~-]{1,256}$/;
+      var PARAM = /^[A-Za-z0-9._-]{1,64}$/;
+
+      function newRid() {
+        return 't-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+      }
+
+      function el(tag, props, children) {
+        var node = document.createElement(tag);
+        Object.keys(props || {}).forEach(function (k) { node[k] = props[k]; });
+        (children || []).forEach(function (c) { node.append(c); });
+        return node;
+      }
+
+      function cell(content) {
+        return el('td', {}, [content]);
+      }
+
+      // ── The supplier editor ──────────────────────────────────────────────
+      // `draft` is a list of { code, name, ridParam, redirects }: what the inputs show, saved only on Save.
+      var draft = [];
+      var editor = document.getElementById('editor');
+      var errBox = document.getElementById('editor-err');
+
+      function toDraft(suppliers) {
+        return Object.keys(suppliers || {}).map(function (code) {
+          var s = suppliers[code] || {};
+          var redirects = {};
+          ENDINGS.forEach(function (k) { redirects[k] = (s.redirects && s.redirects[k]) || ''; });
+          return { code: code, name: s.name || '', ridParam: s.ridParam || 'rid', redirects: redirects };
+        });
+      }
+
+      function urlProblem(value) {
+        if (!value) return null;
+        try {
+          var url = new URL(value.split('[RID]').join('x'), here);
+          return url.protocol === 'http:' || url.protocol === 'https:' ? null : 'must be an http(s) URL';
+        } catch (e) {
+          return 'is not a URL';
+        }
+      }
+
+      /** The draft as config.js holds it, or a list of what is wrong with it. */
+      function validated() {
+        var problems = [];
+        var out = {};
+        draft.forEach(function (s, i) {
+          var label = s.code || 'supplier ' + (i + 1);
+          if (!CODE.test(s.code)) problems.push(label + ': the code must be letters, digits, ".", "_", "~" or "-"');
+          else if (Object.prototype.hasOwnProperty.call(out, s.code)) problems.push(label + ': the code is used twice');
+          if (!PARAM.test(s.ridParam)) problems.push(label + ': the respondent id parameter must be letters, digits, ".", "_" or "-"');
+          var redirects = {};
+          ENDINGS.forEach(function (k) {
+            var v = s.redirects[k].trim();
+            var bad = urlProblem(v);
+            if (bad) problems.push(label + ': the ' + k + ' URL ' + bad);
+            if (v) redirects[k] = v;
+          });
+          out[s.code] = { name: s.name.trim() || s.code, ridParam: s.ridParam, redirects: redirects };
+        });
+        return problems.length ? { problems: problems } : { suppliers: out };
+      }
+
+      function warnings(s) {
+        var missing = ENDINGS.filter(function (k) { return s.redirects[k] && s.redirects[k].indexOf('[RID]') === -1; });
+        var empty = ENDINGS.every(function (k) { return !s.redirects[k]; });
+        if (empty) return 'An open link: no respondent id is asked for, and every ending stays on the survey.';
+        return missing.length ? 'No [RID] in the ' + missing.join(', ') + ' URL: the supplier cannot tell who it is.' : '';
+      }
+
+      function renderEditor() {
+        editor.textContent = '';
+        draft.forEach(function (s, i) {
+          var warn = el('p', { className: 'cfg', textContent: warnings(s) });
+          function input(label, value, onInput, wide) {
+            var field = el('div', { className: 'field' + (wide ? ' span2' : '') });
+            var box = el('input', { type: 'text', value: value, spellcheck: false });
+            box.addEventListener('input', function () { onInput(box.value); warn.textContent = warnings(s); });
+            field.append(el('label', { textContent: label }), box);
+            return field;
+          }
+          var remove = el('button', { className: 'btn-ghost', textContent: 'Remove' });
+          remove.onclick = function () { draft.splice(i, 1); renderEditor(); };
+          var grid = el('div', { className: 'sup-grid' }, [
+            input('Code (src)', s.code, function (v) { s.code = v.trim(); }),
+            input('Name', s.name, function (v) { s.name = v; }),
+            input('Respondent id parameter', s.ridParam, function (v) { s.ridParam = v.trim(); })
+          ].concat(ENDINGS.map(function (k) {
+            return input(k[0].toUpperCase() + k.slice(1) + ' URL', s.redirects[k], function (v) { s.redirects[k] = v; }, true);
+          })));
+          editor.append(el('div', { className: 'sup' }, [
+            el('div', { className: 'sup-head' }, [el('h2', { textContent: s.name || s.code || 'New supplier' }), remove]),
+            grid, warn
+          ]));
+        });
+        if (!draft.length) editor.append(el('p', { className: 'cfg', textContent: 'No suppliers: every respondent ends on the survey.' }));
+      }
+
+      function showSource() {
+        document.getElementById('source-of-list').textContent = cfg.suppliersSaved
+          ? 'Using the list saved in this browser.'
+          : 'Using assets/config.js\'s list. Nothing saved in this browser.';
+      }
+
+      document.getElementById('add').onclick = function () {
+        var n = draft.length + 1;
+        var code = 'supplier-' + n;
+        var page = 'supplier.html?s=' + code;
+        draft.push({ code: code, name: 'Supplier ' + n, ridParam: 'rid', redirects: {
+          complete: page + '&status=complete&rid=[RID]', terminate: page + '&status=terminate&rid=[RID]',
+          overquota: page + '&status=overquota&rid=[RID]', security: page + '&status=security&rid=[RID]'
+        } });
+        renderEditor();
+      };
+      document.getElementById('discard').onclick = function () {
+        draft = toDraft(cfg.suppliers); errBox.textContent = ''; renderEditor();
+      };
+      document.getElementById('reset').onclick = function () {
+        try { localStorage.removeItem(cfg.savedSuppliersKey); } catch (e) {}
+        cfg.suppliers = cfg.defaultSuppliers;
+        cfg.suppliersSaved = false;
+        draft = toDraft(cfg.suppliers); errBox.textContent = '';
+        renderEditor(); showSource(); renderLinks();
+      };
+      document.getElementById('save').onclick = function () {
+        var result = validated();
+        if (result.problems) { errBox.textContent = result.problems.join(' · '); return; }
+        try {
+          localStorage.setItem(cfg.savedSuppliersKey, JSON.stringify(result.suppliers));
+        } catch (e) {
+          errBox.textContent = 'This browser will not store it (a private window, or blocked site data). Export it instead.';
+          return;
+        }
+        errBox.textContent = '';
+        cfg.suppliers = result.suppliers;
+        cfg.suppliersSaved = true;
+        draft = toDraft(cfg.suppliers);
+        renderEditor(); showSource(); renderLinks();
+      };
+      document.getElementById('export').onclick = function () {
+        var result = validated();
+        if (result.problems) { errBox.textContent = result.problems.join(' · '); return; }
+        errBox.textContent = '';
+        var text = 'suppliers: ' + JSON.stringify(result.suppliers, null, 2).replace(/\n/g, '\n    ') + ',';
+        document.getElementById('export-box').style.display = '';
+        var area = document.getElementById('export-text');
+        area.value = '    ' + text;
+        area.select();
+      };
+
+      // ── Entry links and lobby targets ────────────────────────────────────
+      // An entry link as the supplier sends it: its code, and a respondent id in its own parameter (none for an
+      // open link). `rid` null leaves the [RID] macro for the lobby to fill.
+      function entryUrl(code, rid) {
+        var s = cfg.suppliers[code] || {};
+        var url = here + 'index.html?src=' + encodeURIComponent(code);
+        if (Object.keys(s.redirects || {}).length === 0) return url; // an open link: no ids
+        return url + '&' + encodeURIComponent(s.ridParam || 'rid') + '=' + (rid === null ? '[RID]' : encodeURIComponent(rid));
+      }
+
+      function endings(s) {
+        var r = s.redirects || {};
+        var named = ENDINGS.filter(function (k) { return r[k]; });
+        return named.length ? named.join(', ') : 'none: our own end page';
+      }
+
+      function renderLinks() {
+        var rows = document.querySelector('#suppliers tbody');
+        var targets = document.querySelector('#targets tbody');
+        rows.textContent = '';
+        targets.textContent = '';
+        Object.keys(cfg.suppliers || {}).forEach(function (code) {
+          var s = cfg.suppliers[code];
+          var name = (s.name || code) + ' (' + code + ')';
+          var open = el('button', { className: 'btn-primary', textContent: 'Open ↗' });
+          open.onclick = function () { window.open(entryUrl(code, newRid()), '_blank', 'noopener'); };
+          rows.append(el('tr', {}, [
+            cell(name), cell(el('code', { textContent: entryUrl(code, 'a-new-id') })), cell(endings(s)), cell(open)
+          ]));
+          targets.append(el('tr', {}, [cell(name), cell(el('code', { textContent: entryUrl(code, null) }))]));
+        });
+      }
+
+      // ── The lobby link ───────────────────────────────────────────────────
+      var linkEl = document.getElementById('link');
+      var lobbyRid = newRid();
+
+      function lobbyUrl(lane) {
+        var raw = linkEl.value.trim();
+        if (!raw) return null;
+        var url;
+        try { url = new URL(raw); } catch (e) { return null; }
+        url.searchParams.set('rid', lobbyRid); // unsigned: the last value wins, so setting it is enough
+        if (lane) url.searchParams.set('_test_lane', lane);
+        return url.toString();
+      }
+
+      function buildLobby() {
+        var lobby = lobbyUrl(null);
+        document.getElementById('lobby-url').textContent = lobby || 'paste a link above';
+        var open = document.getElementById('lobby-open');
+        if (lobby) open.href = lobby; else open.removeAttribute('href');
+      }
+
+      linkEl.addEventListener('input', buildLobby);
+      document.getElementById('lobby-new').onclick = function () { lobbyRid = newRid(); buildLobby(); };
+      document.querySelectorAll('.lane').forEach(function (b) {
+        b.onclick = function () {
+          var url = lobbyUrl(b.getAttribute('data-lane'));
+          if (url) window.open(url, '_blank', 'noopener');
+          lobbyRid = newRid();
+          buildLobby();
+        };
+      });
+
+      var backend = String(cfg.backend || '').replace(/\/+$/, '');
+      document.getElementById('dashboard').href = backend + '/dashboard/';
+      document.getElementById('full').textContent = (cfg.quotasFull || []).join(', ') || 'none';
+      document.getElementById('cfgline').textContent =
+        'Backend: ' + backend + ' · agency ' + cfg.agency + ' · survey project ' + cfg.project +
+        ' · fail strategy ' + cfg.failStrategy;
+
+      // Set-up mistakes the survey would otherwise only show as a refused session.
+      var setup = [];
+      if (location.protocol === 'file:') {
+        setup.push('This page was opened from a file. SurveyGuard refuses a file:// page (it sends no origin), and ' +
+          'entry links point at file:// too. In this folder run: python -m http.server 5500 --bind 127.0.0.1, then ' +
+          'open http://127.0.0.1:5500/launch.html.');
+      }
+      if (!/^agy_[0-9a-f]{32}$/.test(cfg.agency || '') || !/^prj_[0-9a-f]{32}$/.test(cfg.project || '')) {
+        setup.push('assets/config.js still has placeholder ids: set agency (agy_…, Settings in the dashboard) and ' +
+          'project (prj_…, Projects).');
+      }
+      if (setup.length) {
+        var box = document.getElementById('setup');
+        box.style.display = '';
+        box.append(el('h2', { textContent: 'Not set up yet' }));
+        setup.forEach(function (line) { box.append(el('p', { textContent: line })); });
+      }
+
+      draft = toDraft(cfg.suppliers);
+      renderEditor();
+      showSource();
+      renderLinks();
+      buildLobby();
+    })();
+  </script>
+</body>
+</html>

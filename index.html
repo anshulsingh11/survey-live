@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Consumer Habits Survey</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="brandbar">
+      <span class="dot"></span> Insights Panel
+      <span class="badge" id="sdk-badge">loading…</span>
+    </div>
+    <div class="progress"><span id="bar"></span></div>
+    <div class="card" id="app"><!-- the survey renders here --></div>
+    <p class="foot">Quality assured by SurveyGuard. Behaviour is analysed to keep responses genuine.</p>
+  </div>
+
+  <!-- 1) Settings: window.SG_CONFIG -->
+  <script src="assets/config.js"></script>
+  <!-- 2) The survey. It loads the SDK from SG_CONFIG.backend + /static/sdk/surveyguard.js itself. -->
+  <script src="assets/survey.js"></script>
+</body>
+</html>

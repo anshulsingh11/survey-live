@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Thank you</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="brandbar"><span class="dot"></span> Insights Panel</div>
+    <div class="card">
+      <h1 id="title">Thank you!</h1>
+      <p class="lede" id="lede">Your responses have been recorded. We appreciate you taking the time to share your
+        feedback.</p>
+      <p class="lede">You can now safely close this window.</p>
+
+      <!-- The SurveyGuard result: shown only to the operator (localhost, 127.0.0.1, or ?sg_debug=1). -->
+      <div id="verdict" class="verdict" style="display:none"></div>
+    </div>
+  </div>
+
+  <script src="assets/config.js"></script>
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+
+      // This survey's own end page: for a respondent whose supplier gave no URL for the ending (survey.js::finish).
+      var end = params.get('end') || 'complete';
+      var ENDS = {
+        terminate: ['Thank you for your interest', 'Unfortunately you do not qualify for this survey.'],
+        overquota: ['Thank you for your interest', 'We already have enough responses from people like you.'],
+        security: ['Thank you for your interest', 'Unfortunately you do not qualify for this survey.']
+      };
+      if (ENDS[end]) {
+        document.getElementById('title').textContent = ENDS[end][0];
+        document.getElementById('lede').textContent = ENDS[end][1] + ' We appreciate your time.';
+      }
+
+      var local = ['localhost', '127.0.0.1', '::1'].indexOf(location.hostname) !== -1;
+      if (params.get('sg_debug') !== '1' && !local) return;
+
+      var r = null;
+      try { r = JSON.parse(sessionStorage.getItem('sg_result') || 'null'); } catch (e) {}
+      if (!r) r = { action: null, verdict: null, source: 'not analysed: the screener ended it (' + end + ')' };
+
+      function esc(s) {
+        return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      }
+      var verdict = String(r.verdict || (r.failure ? 'ERROR' : 'NONE')).toUpperCase();
+      var cls = { ALLOW: 'allow', FLAG: 'flag', REVIEW: 'flag', BLOCK: 'block', GHOST: 'block', ERROR: 'error' }[verdict]
+        || 'flag';
+      var el = document.getElementById('verdict');
+      el.className = 'verdict ' + cls;
+      el.style.display = '';
+
+      var cfg = window.SG_CONFIG || {};
+      var detail = r.scanId && cfg.backend
+        ? '<p><a href="' + esc(cfg.backend + '/dashboard/scans/' + encodeURIComponent(r.scanId)) +
+          '" target="_blank" rel="noopener">Open this scan in the dashboard ↗</a></p>'
+        : '';
+      el.innerHTML =
+        '<h2>Debug: SurveyGuard result (operator only)</h2>' +
+        '<p>Action <strong>' + esc(r.action) + '</strong> · effective verdict <strong>' + esc(verdict) +
+        '</strong> · decided by <strong>' + esc(r.source) + '</strong></p>' +
+        (r.failure ? '<p>Failure: <strong>' + esc(r.failure) + '</strong></p>' : '') +
+        detail +
+        '<pre>' + esc(JSON.stringify(r, null, 2)) + '</pre>';
+    })();
+  </script>
+</body>
+</html>

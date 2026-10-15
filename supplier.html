@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supplier Landing</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <!-- A stand-in for a supplier's redirect endpoint: it shows what the survey sent back. A real supplier records the
+       status against its respondent id and pays (or not) for the complete. -->
+  <div class="wrap">
+    <div class="brandbar"><span class="dot"></span> <span id="supplier">Supplier</span>: redirect received</div>
+    <div class="card">
+      <h1 id="status">…</h1>
+      <p class="lede" id="meaning"></p>
+      <div class="urlbox" id="url"></div>
+      <table class="matrix" id="params"><tbody></tbody></table>
+      <div id="verdict" class="verdict" style="display:none"></div>
+      <div class="nav"><a class="btn-ghost" href="launch.html" style="text-decoration:none">← Console</a></div>
+    </div>
+  </div>
+
+  <script src="assets/config.js"></script>
+  <script>
+    (function () {
+      var cfg = window.SG_CONFIG || {};
+      var params = new URLSearchParams(location.search);
+      var code = params.get('s') || '';
+      var supplier = (cfg.suppliers || {})[code];
+      document.getElementById('supplier').textContent = supplier ? supplier.name : (code || 'Unknown supplier');
+
+      // Panel B's style: a numeric result code. Panel A's: a status word.
+      var CODES = { '1': 'complete', '2': 'terminate', '3': 'overquota', '4': 'security' };
+      var status = params.get('status') || CODES[params.get('result')] || 'unknown';
+      var MEANING = {
+        complete: 'Completed the survey. The supplier is paid for this respondent.',
+        terminate: 'Did not qualify. No payment.',
+        overquota: 'Qualified, but the quota was full. No payment.',
+        security: 'Screened out for quality or fraud. No payment; the supplier is told why.',
+        unknown: 'The redirect did not say.'
+      };
+      document.getElementById('status').textContent = status.toUpperCase();
+      document.getElementById('meaning').textContent = MEANING[status] || MEANING.unknown;
+      document.getElementById('url').textContent = location.href;
+
+      var body = document.querySelector('#params tbody');
+      params.forEach(function (value, key) {
+        var tr = document.createElement('tr');
+        var k = document.createElement('td'); k.textContent = key;
+        var v = document.createElement('td'); v.textContent = value || '(empty)';
+        tr.append(k, v);
+        body.append(tr);
+      });
+
+      // What SurveyGuard said, when this browser ran the survey (operator only).
+      var local = ['localhost', '127.0.0.1', '::1'].indexOf(location.hostname) !== -1;
+      if (!local && params.get('sg_debug') !== '1') return;
+      var r = null, ending = null;
+      try {
+        r = JSON.parse(sessionStorage.getItem('sg_result') || 'null');
+        ending = JSON.parse(sessionStorage.getItem('sg_ending') || 'null');
+      } catch (e) {}
+      if (!r && !ending) return;
+      var el = document.getElementById('verdict');
+      el.className = 'verdict ' + ({ complete: 'allow', security: 'block' }[status] || 'flag');
+      el.style.display = '';
+      var h = document.createElement('h2');
+      h.textContent = 'Debug: the survey\'s side (operator only)';
+      var pre = document.createElement('pre');
+      pre.textContent = JSON.stringify({ ending: ending, surveyguard: r }, null, 2);
+      el.append(h, pre);
+    })();
+  </script>
+</body>
+</html>
